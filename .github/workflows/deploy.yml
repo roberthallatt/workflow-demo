@@ -1,0 +1,158 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      rollback:
+        description: 'Commit SHA or tag to rollback to'
+        required: false
+
+jobs:
+
+  # deploy code to server
+
+  deploy:
+    if: ${{ !github.event.inputs.rollback }}
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Deploy
+      run: |
+        # Create archive
+        tar -czf repo.tar.gz --exclude='.git' --exclude='README.md' *
+
+        # Get the size of the tar file
+        TAR_SIZE=$(du -k "repo.tar.gz" | cut -f1)
+
+        # Copy the archive to the server
+        scp -o StrictHostKeyChecking=no repo.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/webmaster/deploy
+
+        # Connect to server and deploy
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+
+          # Check available disk space
+          AVAILABLE_SPACE=$(df --output=avail /home/webmaster | tail -n 1)
+
+          # Ensure there is enough space for the new release
+          if [ $AVAILABLE_SPACE -lt $((TAR_SIZE * 2)) ]; then
+            echo "Not enough disk space for deployment. Required: $((TAR_SIZE * 2)) KB, Available: $AVAILABLE_SPACE KB"
+            exit 1
+          fi
+
+          # Define variables
+          DEPLOY_DIR="${{ secrets.DEPLOY_DIR }}"
+          RELEASES_DIR="${{ secrets.RELEASES_DIR }}"
+          CURRENT_DIR="${{ secrets.CURRENT_DIR }}"
+          TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+          NEW_RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
+          SHARED_DIR="${{ secrets.SHARED_DIR }}"
+          BACKUP_LIMIT=5
+
+          # Make the new release directory
+          mkdir -p "$NEW_RELEASE_DIR"
+
+          # Extract the archive
+          cd ${{ secrets.TMP_DIR }}
+          tar -xzf repo.tar.gz --one-top-level="$NEW_RELEASE_DIR"
+
+          # Clean up
+          rm -rf repo.tar.gz
+
+          # Create symlinks to shared resources (if you need them)
+          ln -sfn "$SHARED_DIR/.env" "$NEW_RELEASE_DIR/.env"
+          ln -sfn "$SHARED_DIR/uploads" "$NEW_RELEASE_DIR/uploads"
+
+          # Update symlink
+          ln -sfn "$NEW_RELEASE_DIR" "$CURRENT_DIR"
+
+          # Manage backups
+          cd "$RELEASES_DIR"
+          BACKUPS=$(ls -1t | tail -n +$((BACKUP_LIMIT+1)))
+          for BACKUP in $BACKUPS; do
+            rm -rf "$BACKUP"
+          done
+        EOF
+
+  # Rollback to specific commit
+
+  rollback:
+    if: ${{ github.event.inputs.rollback }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout specific commit
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.rollback }}
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy
+        run: |
+          # Create archive
+          tar -czf repo.tar.gz --exclude='.git' --exclude='README.md' *
+
+          # Get the size of the tar file
+          TAR_SIZE=$(du -k "repo.tar.gz" | cut -f1)
+
+          # Copy the archive to the server
+          scp -o StrictHostKeyChecking=no repo.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/webmaster/deploy
+
+          # Connect to server and deploy
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+
+            # Check available disk space
+            AVAILABLE_SPACE=$(df --output=avail /home/${{ secrets.SERVER_USER }} | tail -n 1)
+
+            # Ensure there is enough space for the new release
+            if [ $AVAILABLE_SPACE -lt $((TAR_SIZE * 2)) ]; then
+              echo "Not enough disk space for deployment. Required: $((TAR_SIZE * 2)) KB, Available: $AVAILABLE_SPACE KB"
+              exit 1
+            fi
+
+            # Define variables
+            DEPLOY_DIR="${{ secrets.DEPLOY_DIR }}"
+            RELEASES_DIR="${{ secrets.RELEASES_DIR }}"
+            CURRENT_DIR="${{ secrets.CURRENT_DIR }}"
+            TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+            NEW_RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
+            SHARED_DIR="${{ secrets.SHARED_DIR }}"
+            BACKUP_LIMIT=5
+
+            # Make the new release directory
+            mkdir -p "$NEW_RELEASE_DIR"
+
+            # Extract the archive
+            cd ${{ secrets.TMP_DIR }}
+            tar -xzf repo.tar.gz --one-top-level="$NEW_RELEASE_DIR"
+
+            # Clean up
+            rm -rf repo.tar.gz
+
+            # Create symlinks to shared resources (if you need them)
+            ln -sfn "$SHARED_DIR/.env" "$NEW_RELEASE_DIR/.env"
+            ln -sfn "$SHARED_DIR/uploads" "$NEW_RELEASE_DIR/uploads"
+
+            # Update symlink
+            ln -sfn "$NEW_RELEASE_DIR" "$CURRENT_DIR"
+
+            # Manage backups
+            cd "$RELEASES_DIR"
+            BACKUPS=$(ls -1t | tail -n +$((BACKUP_LIMIT+1)))
+            for BACKUP in $BACKUPS; do
+              rm -rf "$BACKUP"
+            done
+          EOF
