@@ -26,13 +26,13 @@ gh workflow run deploy.yml --input rollback=[insert commmit sha here]
 
 You will need to create the following Github secrets:
 
-- CURRENT_DIR
-- DEPLOY_DIR
-- RELEASES_DIR
-- TMP_DIR
-- SHARED_DIR
-- SSH_PRIVATE_KEY
-- SERVER_HOST
-- SERVER_USER
+- CURRENT_DIR - path of the symlink that is created Ex. /home/john/somesite.com/current
+- DEPLOY_DIR - path for the root folder where your files live Ex. /home/john/somesite.com 
+- RELEASES_DIR - path to the releases directory Ex. /home/john/somesite.com/releases
+- TMP_DIR - path to temp folder where the repo is uploaded to on the server Ex. /home/john/deploy
+- SHARED_DIR - path to shared assets that need to survive deploys Ex. /home/john/somesite.com/shared
+- SSH_PRIVATE_KEY - private key that you use for SSH access
+- SERVER_HOST - usually an IP address
+- SERVER_USER - username
 
 Enjoy and happy coding!
