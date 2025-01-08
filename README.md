@@ -6,7 +6,7 @@ This is a simple Github workflow that deploys code to a server. It is configured
 
 Simple. Just push your code.
 
-Alternatively, you can trigger the workflow manually using the Github CLI:
+Alternatively, you can trigger the workflow manually using the Github CLI (it needs to be installed on your computer first):
 
 ```bash
 gh workflow run deploy.yml
